@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from "express";
-import { verifyAccessToken, TokenPayloadType } from "../utils/jwt";
+import { verifyAccessToken } from "../utils/jwt";
 import { Role } from "@prisma/client";
 import { handleError } from "../libs/handleError";
 import { handleSuccess } from "../libs/handleSuccess";
+import { TokenPayloadType } from "../types/tokenpayload.types";
 
 export interface RequestWithUser extends Request {
   user?: TokenPayloadType;

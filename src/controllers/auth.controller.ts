@@ -7,22 +7,12 @@ import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
-  TokenPayloadType,
 } from "../utils/jwt";
 import { handleError } from "../libs/handleError";
 import { handleSuccess } from "../libs/handleSuccess";
+import { TokenPayloadType } from "../types/tokenpayload.types";
+import { refreshTokenSetToCookies } from "../libs/refreshTokenSetToCookies";
 
-// set refresh token into cookie
-const refreshTokenSetToCookies = (res: any, token: string) => {
-  res.cookie("refreshToken", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
-};
-
-// Register a new User
 export const register = async (req: Request, res: Response) => {
   try {
     // Validation data with zod
@@ -139,7 +129,6 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-// Logout User and invalidate session
 export const logout = async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.cookies;
@@ -164,7 +153,6 @@ export const logout = async (req: Request, res: Response) => {
   }
 };
 
-// delete user from db
 export const deleteUser = async (req: Request, res: Response) => {
   try {
     const id = req.query.id as string;
@@ -196,7 +184,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
   }
 };
 
-// Rotate session and generate a new Access Token & Refresh Token
+// generate a new Access Token & Refresh Token
 export const refreshSession = async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.cookies;
@@ -205,7 +193,7 @@ export const refreshSession = async (req: Request, res: Response) => {
       return handleError(res, 401, "Refresh token is missing");
     }
 
-    // Verify token signature and expiration
+    // Verify token
     let decoded: TokenPayloadType;
     try {
       decoded = verifyRefreshToken(refreshToken);
@@ -213,22 +201,21 @@ export const refreshSession = async (req: Request, res: Response) => {
       return handleError(res, 401, "Invalid or expired refresh token");
     }
 
-    // Query database whitelist to verify this token is still active
+    // find the  token is still active in db?
     const activeToken = await prisma.refreshToken.findUnique({
       where: { token: refreshToken },
     });
 
     if (!activeToken) {
-      return handleError(res, 401, "Session has been invalidated or expired.");
+      return handleError(res, 401, "Session has been expired.");
     }
 
-    // Check database record expiration explicitly
+    // Check database expiration
     if (activeToken.expiresAt < new Date()) {
       await prisma.refreshToken.delete({ where: { id: activeToken.id } });
       return handleError(res, 404, "Refresh token has expired.");
     }
 
-    // getting user to confirm account exists
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
     });
@@ -236,14 +223,13 @@ export const refreshSession = async (req: Request, res: Response) => {
       return handleError(res, 404, "User account not found.");
     }
 
-    // Token rotation payload
     const tokenPayload: TokenPayloadType = {
       userId: user.id,
       email: user.email,
       role: user.role,
     };
 
-    // Generate fresh token pair
+    // Generate fresh tokens
     const newAccessToken = generateAccessToken(tokenPayload);
     const newRefreshToken = generateRefreshToken(tokenPayload);
 
@@ -271,10 +257,9 @@ export const refreshSession = async (req: Request, res: Response) => {
   }
 };
 
-// Fetch authenticated User profile details
 export const getMe = async (req: any, res: Response) => {
   try {
-    // req.user is attached by the authenticate middleware
+    // req.user gettng from the middleware!
     if (!req.user) {
       return handleError(res, 401, "User is not authenticated.");
     }
