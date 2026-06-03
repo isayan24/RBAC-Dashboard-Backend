@@ -5,6 +5,7 @@ import { RequestWithUser } from "../middlewares/auth.middleware";
 import { createProject, updateProject } from "../utils/project.validation";
 import { handleError } from "../libs/handleError";
 import { handleSuccess } from "../libs/handleSuccess";
+import { uploadToCloudinary } from "../libs/cloudinary";
 
 export const createProjectController = async (
   req: RequestWithUser,
@@ -16,13 +17,21 @@ export const createProjectController = async (
     }
 
     const validatedData = createProject.parse(req.body);
-    const { name, description, image } = validatedData;
+    const { name, description } = validatedData;
+
+    let imageUrl: string | undefined = undefined;
+    const image = req.file;
+
+    if (image) {
+      const uploadResult = await uploadToCloudinary(image.buffer, image.mimetype);
+      imageUrl = uploadResult.url;
+    }
 
     const newProject = await prisma.project.create({
       data: {
         name,
         description,
-        image,
+        image: imageUrl,
         userId: req.user.userId,
       },
     });
@@ -144,9 +153,20 @@ export const updateProjectController = async (
     // Validate update parameters
     const validatedData = updateProject.parse(req.body);
 
+    let imageUrl: string | undefined = undefined;
+    const image = req.file;
+
+    if (image) {
+      const uploadResult = await uploadToCloudinary(image.buffer, image.mimetype);
+      imageUrl = uploadResult.url;
+    }
+
     const updatedProject = await prisma.project.update({
       where: { id },
-      data: validatedData,
+      data: {
+        ...validatedData,
+        ...(imageUrl !== undefined && { image: imageUrl }),
+      },
     });
 
     return handleSuccess(

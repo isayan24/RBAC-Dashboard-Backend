@@ -4,13 +4,28 @@ import { handleError } from "../libs/handleError";
 import { createTaskSchema, updateTaskSchema } from "../utils/task.validation";
 import prisma from "../utils/db";
 import { handleSuccess } from "../libs/handleSuccess";
+import { uploadToCloudinary } from "../libs/cloudinary";
 
 export const createTaskController = async (req: Request, res: Response) => {
   try {
     const validatedTask = createTaskSchema.parse(req.body);
 
+    let attachmentUrl: string | undefined = undefined;
+    let attachmentName: string | undefined = undefined;
+    const file = req.file;
+
+    if (file) {
+      const uploadResult = await uploadToCloudinary(file.buffer, file.mimetype, "task_attachments");
+      attachmentUrl = uploadResult.url;
+      attachmentName = file.originalname;
+    }
+
     const task = await prisma.task.create({
-      data: validatedTask,
+      data: {
+        ...validatedTask,
+        attachmentUrl,
+        attachmentName,
+      },
       include: {
         assignment: {
           select: {
@@ -111,9 +126,22 @@ export const updateTaskController = async (req: Request, res: Response) => {
 
     const validatedData = updateTaskSchema.parse(req.body);
 
+    let attachmentUrl: string | undefined = undefined;
+    let attachmentName: string | undefined = undefined;
+    const file = req.file;
+
+    if (file) {
+      const uploadResult = await uploadToCloudinary(file.buffer, file.mimetype, "task_attachments");
+      attachmentUrl = uploadResult.url;
+      attachmentName = file.originalname;
+    }
+
     const updatedTask = await prisma.task.update({
       where: { id },
-      data: validatedData,
+      data: {
+        ...validatedData,
+        ...(attachmentUrl !== undefined && { attachmentUrl, attachmentName }),
+      },
     });
 
     return handleSuccess(res, 200, "Task updated successfully", updatedTask);

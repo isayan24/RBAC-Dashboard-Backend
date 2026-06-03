@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Role } from "@prisma/client";
+import { upload } from "../middlewares/upload.middleware";
 import {
   createProjectController,
   getAllProjectsController,
@@ -22,13 +23,15 @@ router.get("/:id", authenticateCheck, getProjectByIdController);
 router.post(
   "/",
   authenticateCheck,
-  userRoleCheck([Role.ADMIN]),
+  userRoleCheck([Role.ADMIN, Role.STAFF]),
+  upload.single("image"),
   createProjectController,
 );
 router.patch(
   "/:id",
   authenticateCheck,
   userRoleCheck([Role.ADMIN]),
+  upload.single("image"),
   updateProjectController,
 );
 router.delete(

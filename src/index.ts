@@ -4,6 +4,8 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 
+dotenv.config();
+
 import authRouter from "./routes/auth.routes";
 import projectRouter from "./routes/project.routes";
 import assignmentRouter from "./routes/assignment.routes";
@@ -11,8 +13,6 @@ import taskRouter from "./routes/task.routes";
 
 import { ZodError } from "zod";
 import { register } from "./controllers/auth.controller";
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
