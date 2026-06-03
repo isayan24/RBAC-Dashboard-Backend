@@ -1,0 +1,202 @@
+import { Response } from "express";
+import prisma from "../utils/db";
+import { ZodError } from "zod";
+import { RequestWithUser } from "../middlewares/auth.middleware";
+import { createProject, updateProject } from "../utils/project.validation";
+import { handleError } from "../libs/handleError";
+import { handleSuccess } from "../libs/handleSuccess";
+
+export const createProjectController = async (
+  req: RequestWithUser,
+  res: Response,
+) => {
+  try {
+    if (!req.user) {
+      return handleError(res, 401, "User is not authenticated.");
+    }
+
+    const validatedData = createProject.parse(req.body);
+    const { name, description, image } = validatedData;
+
+    const newProject = await prisma.project.create({
+      data: {
+        name,
+        description,
+        image,
+        userId: req.user.userId,
+      },
+    });
+
+    return handleSuccess(res, 201, "Project created successfully", newProject);
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Internal Server Error");
+  }
+};
+
+// fetches all projects -> Only ADMIN
+export const getAllProjectsController = async (
+  req: RequestWithUser,
+  res: Response,
+) => {
+  try {
+    // Parse query params
+    const search = (req.query.search as string) || "";
+
+    const searchFormat = search
+      ? { name: { contains: search, mode: "insensitive" as const } }
+      : {};
+
+    // Run parallel count and paginated query
+    const [totalItems, projects] = await Promise.all([
+      prisma.project.count({ where: searchFormat }),
+
+      prisma.project.findMany({
+        where: searchFormat,
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              name: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return handleSuccess(res, 200, "Projects retrieved successfully", {
+      projects,
+      totalItems,
+    });
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Internal Server Error");
+  }
+};
+
+// Get Project by ID
+export const getProjectByIdController = async (
+  req: RequestWithUser,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return handleError(res, 400, "Project ID is required.");
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+        assignments: {
+          include: {
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+            tasks: true,
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      return handleError(res, 404, "Project not found.");
+    }
+
+    return handleSuccess(
+      res,
+      200,
+      "Project profile fetched successfully!",
+      project,
+    );
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Internal Server Error");
+  }
+};
+
+export const updateProjectController = async (
+  req: RequestWithUser,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return handleError(res, 400, "Project ID is required.");
+    }
+
+    // Verify project exists in DB
+    const existingProject = await prisma.project.findUnique({ where: { id } });
+    if (!existingProject) {
+      return handleError(res, 404, "Project not found with this id.");
+    }
+
+    // Validate update parameters
+    const validatedData = updateProject.parse(req.body);
+
+    const updatedProject = await prisma.project.update({
+      where: { id },
+      data: validatedData,
+    });
+
+    return handleSuccess(
+      res,
+      200,
+      "Project updated successfully",
+      updatedProject,
+    );
+  } catch (error: any) {
+    if (error instanceof ZodError) {
+      return handleError(
+        res,
+        400,
+        "Validation Error",
+        error.errors.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      );
+    }
+    return handleError(res, 500, error.message || "Internal Server Error");
+  }
+};
+
+export const deleteProjectController = async (
+  req: RequestWithUser,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return handleError(res, 400, "Project ID is required.");
+    }
+
+    // Verify project exists in DB
+    const existingProject = await prisma.project.findUnique({ where: { id } });
+    if (!existingProject) {
+      return handleError(res, 404, "Project not found with this id.");
+    }
+
+    // Delete Project automatically deletes all nested join table rows
+    await prisma.project.delete({ where: { id } });
+
+    return handleSuccess(
+      res,
+      200,
+      "Project successfully deleted from database",
+    );
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Internal Server Error");
+  }
+};

@@ -1,13 +1,16 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import { ZodError } from "zod";
 import prisma from "../utils/db";
-import { loginSchema, registerSchema } from "../utils/validation";
+import { loginSchema, registerSchema } from "../utils/auth.validation";
 import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
   TokenPayloadType,
 } from "../utils/jwt";
+import { handleError } from "../libs/handleError";
+import { handleSuccess } from "../libs/handleSuccess";
 
 // set refresh token into cookie
 const refreshTokenSetToCookies = (res: any, token: string) => {
@@ -20,24 +23,17 @@ const refreshTokenSetToCookies = (res: any, token: string) => {
 };
 
 // Register a new User
-export const register = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const register = async (req: Request, res: Response) => {
   try {
     // Validation data with zod
-    const validatedData = registerSchema.parse(req.body);
+    const validData = registerSchema.parse(req.body);
 
-    const { username, email, name, password, role } = validatedData;
+    const { username, email, name, password, role } = validData;
 
     // Check if email already exists
     const existingEmail = await prisma.user.findUnique({ where: { email } });
     if (existingEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "A user with this email already exists!",
-      });
+      return handleError(res, 400, "A user with this email already exists!");
     }
 
     // Check if username already exists
@@ -45,10 +41,7 @@ export const register = async (
       where: { username },
     });
     if (existingUsername) {
-      return res.status(400).json({
-        success: false,
-        message: "This username is already taken",
-      });
+      return handleError(res, 400, "This username is already taken");
     }
 
     // Hashing the password
@@ -68,44 +61,36 @@ export const register = async (
     // Exclude password from response
     const { password: _, ...userWithoutPassword } = newUser;
 
-    return res.status(201).json({
-      success: true,
-      message: "User registered successfully!",
-      data: userWithoutPassword,
-    });
-  } catch (error) {
-    // with next the global error handler with handle the error
-    // without next i need to pass everytime a error block in return
-    next(error);
+    return handleSuccess(
+      res,
+      201,
+      "User registered successfully!",
+      userWithoutPassword,
+    );
+  } catch (error: any) {
+    if (error instanceof ZodError) {
+      return handleError(res, 400, "All fields are required", error);
+    }
+    return handleError(res, 500, error.message || "Internal Server Error");
   }
 };
 
 //  Login User
-export const login = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const login = async (req: Request, res: Response) => {
   try {
-    const validatedData = loginSchema.parse(req.body);
-    const { email, password } = validatedData;
+    const validData = loginSchema.parse(req.body);
+    const { email, password } = validData;
 
     // Find User
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "No account found with this email",
-      });
+      return handleError(res, 404, "No account found with this email");
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
+      return handleError(res, 401, "Invalid email or password");
     }
 
     // Create token payloads
@@ -134,25 +119,28 @@ export const login = async (
     // Not include password in the response
     const { password: _, ...userWithoutPassword } = user;
 
-    return res.status(200).json({
-      success: true,
-      message: "Logged in successfully!",
-      data: {
-        accessToken,
-        user: userWithoutPassword,
-      },
+    return handleSuccess(res, 200, "Logged in successfully!", {
+      accessToken,
+      user: userWithoutPassword,
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    if (error instanceof ZodError) {
+      return handleError(
+        res,
+        400,
+        "Validation Error",
+        error.errors.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      );
+    }
+    return handleError(res, 500, error.message || "Internal Server Error");
   }
 };
 
 // Logout User and invalidate session
-export const logout = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const logout = async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.cookies;
 
@@ -170,64 +158,51 @@ export const logout = async (
       sameSite: "lax",
     });
 
-    return res.status(200).json({
-      success: true,
-      message: "Logged out successfully!",
-    });
-  } catch (error) {
-    next(error);
+    return handleSuccess(res, 200, "Logged out successfully!");
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Internal Server Error");
   }
 };
 
 // delete user from db
-export const deleteUser = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const deleteUser = async (req: Request, res: Response) => {
   try {
     const id = req.query.id as string;
 
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "No id provided for deleting user!",
-      });
+      return handleError(res, 400, "No id provided for deleting user!");
     }
     const findUser = await prisma.user.findFirst({ where: { id } });
 
     if (!findUser) {
-      return res.status(404).json({
-        success: false,
-        message: "No user with this id",
-      });
+      return handleError(res, 404, "There is no user with this id");
     }
 
     await prisma.user.delete({ where: { id } });
 
-    return res.status(200).json({
-      success: true,
-      message: "User deleted from database",
-    });
-  } catch (error) {
-    next(error);
+    return handleSuccess(res, 200, "User deleted from database");
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Internal Server Error");
+  }
+};
+
+export const getAllUsers = async (req: Request, res: Response) => {
+  try {
+    const users = await prisma.user.findMany();
+
+    return handleSuccess(res, 200, "Fetched all users", users);
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Failed to fetch users");
   }
 };
 
 // Rotate session and generate a new Access Token & Refresh Token
-export const refreshSession = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const refreshSession = async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.cookies;
 
     if (!refreshToken) {
-      return res.status(401).json({
-        success: false,
-        message: "Refresh token is missing",
-      });
+      return handleError(res, 401, "Refresh token is missing");
     }
 
     // Verify token signature and expiration
@@ -235,10 +210,7 @@ export const refreshSession = async (
     try {
       decoded = verifyRefreshToken(refreshToken);
     } catch (err) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid or expired refresh token",
-      });
+      return handleError(res, 401, "Invalid or expired refresh token");
     }
 
     // Query database whitelist to verify this token is still active
@@ -247,30 +219,21 @@ export const refreshSession = async (
     });
 
     if (!activeToken) {
-      return res.status(401).json({
-        success: false,
-        message: "Session has been invalidated or expired.",
-      });
+      return handleError(res, 401, "Session has been invalidated or expired.");
     }
 
     // Check database record expiration explicitly
     if (activeToken.expiresAt < new Date()) {
       await prisma.refreshToken.delete({ where: { id: activeToken.id } });
-      return res.status(404).json({
-        success: false,
-        message: "Refresh token has expired.",
-      });
+      return handleError(res, 404, "Refresh token has expired.");
     }
 
-    // Fetch user to confirm account still exists
+    // getting user to confirm account exists
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
     });
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User account not found.",
-      });
+      return handleError(res, 404, "User account not found.");
     }
 
     // Token rotation payload
@@ -284,10 +247,10 @@ export const refreshSession = async (
     const newAccessToken = generateAccessToken(tokenPayload);
     const newRefreshToken = generateRefreshToken(tokenPayload);
 
-    // Delete the old refresh token from DB
+    // delete the old refresh token from DB
     await prisma.refreshToken.delete({ where: { id: activeToken.id } });
 
-    // Store the new refresh token in DB
+    // store the new refresh token in DB
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     await prisma.refreshToken.create({
       data: {
@@ -300,27 +263,20 @@ export const refreshSession = async (
     // Update refresh token cookie in response
     refreshTokenSetToCookies(res, newRefreshToken);
 
-    return res.status(200).json({
-      success: true,
-      message: "Session rotated successfully!",
-      data: {
-        accessToken: newAccessToken,
-      },
+    return handleSuccess(res, 200, "Session rotated successfully!", {
+      accessToken: newAccessToken,
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Internal Server Error");
   }
 };
 
 // Fetch authenticated User profile details
-export const getMe = async (req: any, res: Response, next: NextFunction) => {
+export const getMe = async (req: any, res: Response) => {
   try {
     // req.user is attached by the authenticate middleware
     if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not authenticated.",
-      });
+      return handleError(res, 401, "User is not authenticated.");
     }
 
     const user = await prisma.user.findUnique({
@@ -328,20 +284,19 @@ export const getMe = async (req: any, res: Response, next: NextFunction) => {
     });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User profile not found.",
-      });
+      return handleError(res, 404, "User profile not found.");
     }
 
     // remove password from response
     const { password: _, ...rawUserWithNoPassword } = user;
 
-    return res.status(200).json({
-      success: true,
-      data: rawUserWithNoPassword,
-    });
-  } catch (error) {
-    next(error);
+    return handleSuccess(
+      res,
+      200,
+      "User profile fetched successfully!",
+      rawUserWithNoPassword,
+    );
+  } catch (error: any) {
+    return handleError(res, 500, error.message || "Internal Server Error");
   }
 };

@@ -6,6 +6,7 @@ import {
   refreshSession,
   getMe,
   deleteUser,
+  getAllUsers,
 } from "../controllers/auth.controller";
 import { authenticateCheck } from "../middlewares/auth.middleware";
 
@@ -16,6 +17,7 @@ router.post("/login", login);
 router.post("/refresh", refreshSession);
 router.post("/logout", logout);
 router.delete("/users", deleteUser);
+router.get("/users/all", getAllUsers);
 
 // need the token to verify
 router.get("/me", authenticateCheck, getMe);

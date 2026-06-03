@@ -4,6 +4,8 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import authRouter from "./routes/auth.routes";
+import projectRouter from "./routes/project.routes";
+import assignmentRouter from "./routes/assignment.routes";
 import { ZodError } from "zod";
 import { register } from "./controllers/auth.controller";
 
@@ -26,6 +28,8 @@ app.use(cookieParser());
 
 // Mount API routers
 app.use("/api/auth", authRouter);
+app.use("/api/project", projectRouter);
+app.use("/api/assignment", assignmentRouter);
 
 // Home Route
 app.get("/", (req: Request, res: Response) => {
@@ -33,37 +37,6 @@ app.get("/", (req: Request, res: Response) => {
     message: "Welcome to the RBAC Dashboard API!",
     status: "healthy",
     timestamp: new Date(),
-  });
-});
-
-// main error handling middleware
-app.use((err: any, req: Request, res: Response) => {
-  console.error("Unhandle Error Logged: ", err);
-
-  // Handle Zod errros
-  if (err instanceof ZodError) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        status: 400,
-        message: "Validation Error",
-        details: err.errors.map((issue) => ({
-          field: issue.path.join("."),
-          message: issue.message,
-        })),
-      },
-    });
-  }
-
-  const status = err.status || 500;
-  const message = err.message || "Internal Server Error";
-
-  res.status(status).json({
-    success: false,
-    error: {
-      status,
-      message,
-    },
   });
 });
 
