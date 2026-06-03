@@ -3,9 +3,12 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
+
 import authRouter from "./routes/auth.routes";
 import projectRouter from "./routes/project.routes";
 import assignmentRouter from "./routes/assignment.routes";
+import taskRouter from "./routes/task.routes";
+
 import { ZodError } from "zod";
 import { register } from "./controllers/auth.controller";
 
@@ -26,16 +29,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Mount API routers
+// API routers
 app.use("/api/auth", authRouter);
 app.use("/api/project", projectRouter);
 app.use("/api/assignment", assignmentRouter);
+app.use("/api/task", taskRouter);
 
 // Home Route
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({
-    message: "Welcome to the RBAC Dashboard API!",
-    status: "healthy",
+    message: "Api is Healthy and running!",
+    status: true,
     timestamp: new Date(),
   });
 });
