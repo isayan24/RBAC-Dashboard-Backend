@@ -9,8 +9,7 @@ export interface RequestWithUser extends Request {
   user?: TokenPayloadType;
 }
 
-// Middleware to authenticate requests using JWT's header
-// Attaches the verified user payload to req.user.
+// Middleware to authenticate the user and keep the token in cookies
 export const authenticateCheck = (
   req: RequestWithUser,
   res: Response,

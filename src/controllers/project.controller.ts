@@ -56,6 +56,10 @@ export const getAllProjectsController = async (
     }
 
     const search = (req.query.search as string) || "";
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
     const userRole = req.user.role;
     const userId = req.user.userId;
 
@@ -63,11 +67,11 @@ export const getAllProjectsController = async (
       ? { name: { contains: search, mode: "insensitive" as const } }
       : {};
 
-    const whereClause: any = { ...searchFormat };
+    const filters: any = { ...searchFormat };
 
     // If user is STAFF, only show the project with there access
     if (userRole === "STAFF") {
-      whereClause.assignments = {
+      filters.assignments = {
         some: {
           userId: userId,
         },
@@ -76,11 +80,13 @@ export const getAllProjectsController = async (
 
     // Fetch count and list in parallel
     const [totalItems, projects] = await Promise.all([
-      prisma.project.count({ where: whereClause }),
+      prisma.project.count({ where: filters }),
 
       prisma.project.findMany({
-        where: whereClause,
-        orderBy: { createdAt: "desc" },
+        where: filters,
+        orderBy: { createdAt: "asc" },
+        skip,
+        take: limit,
         include: {
           user: {
             select: {
@@ -93,9 +99,14 @@ export const getAllProjectsController = async (
       }),
     ]);
 
+    const totalPages = Math.ceil(totalItems / limit);
+
     return handleSuccess(res, 200, "Projects retrieved successfully", {
       projects,
       totalItems,
+      page,
+      limit,
+      totalPages,
     });
   } catch (error: any) {
     return handleError(res, 500, error.message || "Internal Server Error");

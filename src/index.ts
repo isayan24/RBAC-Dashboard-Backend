@@ -10,6 +10,7 @@ import authRouter from "./routes/auth.routes";
 import projectRouter from "./routes/project.routes";
 import assignmentRouter from "./routes/assignment.routes";
 import taskRouter from "./routes/task.routes";
+import analyticsRouter from "./routes/analytics.routes";
 
 import { ZodError } from "zod";
 import { register } from "./controllers/auth.controller";
@@ -40,6 +41,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/project", projectRouter);
 app.use("/api/assignment", assignmentRouter);
 app.use("/api/task", taskRouter);
+app.use("/api/analytics", analyticsRouter);
 
 // Home Route
 app.get("/", (req: Request, res: Response) => {

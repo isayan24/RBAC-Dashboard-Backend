@@ -52,17 +52,6 @@ export const createAssignment = async (req: RequestWithUser, res: Response) => {
       assignment,
     );
   } catch (error: any) {
-    if (error instanceof ZodError) {
-      return handleError(
-        res,
-        400,
-        "Validation Error",
-        error.errors.map((issue) => ({
-          field: issue.path.join("."),
-          message: issue.message,
-        })),
-      );
-    }
     return handleError(res, 500, error.message || "Internal Server Error");
   }
 };
@@ -127,6 +116,7 @@ export const getAllAssignments = async (
 
     const projectId = req.query.projectId as string;
     const filterUserId = req.query.userId as string;
+    const taskStatus = req.query.taskStatus as string;
 
     // STAFF can only see their own assignments. Admins can view all or filter by staff.
     const userId = req.user.role === "STAFF" ? req.user.userId : filterUserId;
@@ -143,13 +133,20 @@ export const getAllAssignments = async (
       ];
     }
 
+    if (taskStatus && ["TODO", "IN_PROGRESS", "DONE"].includes(taskStatus)) {
+      filterFOrmat.tasks = {
+        some: {
+          status: taskStatus,
+        },
+      };
+    }
+
     // Counting total items nd assignments
     const [totalItems, assignments] = await Promise.all([
       prisma.assignment.count({ where: filterFOrmat }),
 
       prisma.assignment.findMany({
         where: filterFOrmat,
-        orderBy: { createdAt: "desc" },
         include: {
           project: {
             select: {
@@ -163,6 +160,12 @@ export const getAllAssignments = async (
               email: true,
             },
           },
+          tasks: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
           _count: {
             select: { tasks: true },
           },
@@ -170,9 +173,29 @@ export const getAllAssignments = async (
       }),
     ]);
 
+    // calculating assignment completion rate
+    const assignmentSort = assignments.map((a) => {
+      const total = a.tasks.length;
+      const completed = a.tasks.filter((t: any) => t.status === "DONE").length;
+      const completionRate = total > 0 ? completed / total : 0;
+      const { tasks, ...rest } = a;
+      return {
+        ...rest,
+        completionRate,
+      };
+    });
+
+    // Sort by completion rate descending, fallback to createdAt ascending
+    assignmentSort.sort((a, b) => {
+      if (b.completionRate !== a.completionRate) {
+        return b.completionRate - a.completionRate;
+      }
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+
     return handleSuccess(res, 200, "Assignments retrieved successfully!", {
       totalItems,
-      assignments,
+      assignments: assignmentSort,
     });
   } catch (error: any) {
     return handleError(res, 500, error.message || "Internal Server Error");
