@@ -22,6 +22,8 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3000/",
   "http://localhost:3001/",
+  "https://rbac-dashboard-control.vercel.app",
+  "https://rbac-dashboard-control.vercel.app/",
 ];
 
 // middlewares
