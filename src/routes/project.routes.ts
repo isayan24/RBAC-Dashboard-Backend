@@ -23,7 +23,7 @@ router.get("/:id", authenticateCheck, getProjectByIdController);
 router.post(
   "/",
   authenticateCheck,
-  userRoleCheck([Role.ADMIN, Role.STAFF]),
+  userRoleCheck([Role.ADMIN]),
   upload.single("image"),
   createProjectController,
 );

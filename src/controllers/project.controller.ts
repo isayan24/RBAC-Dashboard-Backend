@@ -23,7 +23,10 @@ export const createProjectController = async (
     const image = req.file;
 
     if (image) {
-      const uploadResult = await uploadToCloudinary(image.buffer, image.mimetype);
+      const uploadResult = await uploadToCloudinary(
+        image.buffer,
+        image.mimetype,
+      );
       imageUrl = uploadResult.url;
     }
 
@@ -48,19 +51,35 @@ export const getAllProjectsController = async (
   res: Response,
 ) => {
   try {
-    // Parse query params
+    if (!req.user) {
+      return handleError(res, 401, "User is not authenticated");
+    }
+
     const search = (req.query.search as string) || "";
+    const userRole = req.user.role;
+    const userId = req.user.userId;
 
     const searchFormat = search
       ? { name: { contains: search, mode: "insensitive" as const } }
       : {};
 
-    // Run parallel count and paginated query
+    const whereClause: any = { ...searchFormat };
+
+    // If user is STAFF, only show the project with there access
+    if (userRole === "STAFF") {
+      whereClause.assignments = {
+        some: {
+          userId: userId,
+        },
+      };
+    }
+
+    // Fetch count and list in parallel
     const [totalItems, projects] = await Promise.all([
-      prisma.project.count({ where: searchFormat }),
+      prisma.project.count({ where: whereClause }),
 
       prisma.project.findMany({
-        where: searchFormat,
+        where: whereClause,
         orderBy: { createdAt: "desc" },
         include: {
           user: {
@@ -157,7 +176,10 @@ export const updateProjectController = async (
     const image = req.file;
 
     if (image) {
-      const uploadResult = await uploadToCloudinary(image.buffer, image.mimetype);
+      const uploadResult = await uploadToCloudinary(
+        image.buffer,
+        image.mimetype,
+      );
       imageUrl = uploadResult.url;
     }
 

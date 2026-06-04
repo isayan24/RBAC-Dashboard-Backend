@@ -2,7 +2,11 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { ZodError } from "zod";
 import prisma from "../utils/db";
-import { loginSchema, registerSchema } from "../utils/auth.validation";
+import {
+  loginSchema,
+  registerSchema,
+  updateUserSchema,
+} from "../utils/auth.validation";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -83,7 +87,7 @@ export const login = async (req: Request, res: Response) => {
       return handleError(res, 401, "Invalid email or password");
     }
 
-    // Create token payloads
+    // Create token
     const tokenPayload: TokenPayloadType = {
       userId: user.id,
       email: user.email,
@@ -171,6 +175,80 @@ export const deleteUser = async (req: Request, res: Response) => {
     return handleSuccess(res, 200, "User deleted from database");
   } catch (error: any) {
     return handleError(res, 500, error.message || "Internal Server Error");
+  }
+};
+
+export const updateUser = async (req: Request, res: Response) => {
+  try {
+    const id = (req.query.id || req.body.id || req.params.id) as string;
+
+    if (!id) {
+      return handleError(res, 400, "User ID is required");
+    }
+
+    const validData = updateUserSchema.parse(req.body);
+
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) {
+      return handleError(res, 404, "User not found with this id");
+    }
+
+    const { username, email, name, password, role } = validData;
+
+    if (email && email !== existingUser.email) {
+      const existEmail = await prisma.user.findUnique({ where: { email } });
+      if (existEmail) {
+        return handleError(res, 400, "A user with this email already exists!");
+      }
+    }
+
+    // Check if username already exists for another user
+    if (username && username !== existingUser.username) {
+      const sameUsername = await prisma.user.findUnique({
+        where: { username },
+      });
+      if (sameUsername) {
+        return handleError(res, 400, "This username is already taken");
+      }
+    }
+
+    const updateData: any = {};
+    if (username !== undefined) updateData.username = username;
+    if (email !== undefined) updateData.email = email;
+    if (name !== undefined) updateData.name = name;
+    if (role !== undefined) updateData.role = role;
+
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // Exclude password from response
+    const { password: _, ...userWithoutPassword } = updatedUser;
+
+    return handleSuccess(
+      res,
+      200,
+      "User updated successfully",
+      userWithoutPassword,
+    );
+  } catch (error: any) {
+    if (error instanceof ZodError) {
+      return handleError(
+        res,
+        400,
+        "Validation Error",
+        error.errors.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      );
+    }
+    return handleError(res, 500, error.message || "Error updating user");
   }
 };
 

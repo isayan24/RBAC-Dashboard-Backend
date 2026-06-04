@@ -22,3 +22,6 @@ export const loginSchema = z.object({
 // for autocomplete in controllers
 export type RegisterSchema = z.infer<typeof registerSchema>;
 export type LoginSchema = z.infer<typeof loginSchema>;
+
+export const updateUserSchema = registerSchema.partial();
+export type UpdateUserSchema = z.infer<typeof updateUserSchema>;

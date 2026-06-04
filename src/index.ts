@@ -17,11 +17,17 @@ import { register } from "./controllers/auth.controller";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3000/",
+  "http://localhost:3001/",
+];
+
 // middlewares
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: allowedOrigins,
     credentials: true,
   }),
 );
